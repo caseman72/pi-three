@@ -1,0 +1,16 @@
+__pycache__/
+**/.claude/
+
+.DS_Store
+
+.idea/
+.vscode/
+
+.esphome/
+.planning/
+**/.rcs/
+
+node_modules/
+secrets.yml
+secrets.h
+config.env
