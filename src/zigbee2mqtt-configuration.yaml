@@ -13,8 +13,8 @@ permit_join: false
 
 mqtt:
   base_topic: zigbee
-  server: 'mqtts://618185f1c9a74d5c93aaeb133c4f1894.s1.eu.hivemq.cloud'
-  user: canaduino
+  server: 'mqtts://your_broker.hivemq.cloud'
+  user: '<MQTT_USER>'
   password: '<MQTT_PASSWORD>'
   client_id: 'zigbee2mqtt-pi-three'
 
