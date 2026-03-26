@@ -98,7 +98,7 @@ class TestOnConnect:
         assert len(birth_calls) >= 1
 
     def test_on_connect_subscribes_door_topics(self, env_vars):
-        """on_connect subscribes to both door command topics with QoS 1."""
+        """on_connect subscribes to exactly 2 door command topics with QoS 1."""
         rc = _load_controller(env_vars)
         client = MagicMock()
         reason_code = MagicMock()
@@ -108,6 +108,7 @@ class TestOnConnect:
 
         client.subscribe.assert_called_once()
         sub_args = client.subscribe.call_args[0][0]
+        assert len(sub_args) == 2, f"Expected 2 subscriptions, got {len(sub_args)}"
         topics = [t[0] for t in sub_args]
         assert "garage-controller/button/door_1/command" in topics
         assert "garage-controller/button/door_2/command" in topics
@@ -126,8 +127,8 @@ class TestOnConnect:
             rc.on_connect(client, None, MagicMock(), reason_code, None)
             mock_disc.assert_called_once_with(client)
 
-    def test_on_connect_subscribes_z2m_topics(self, env_vars):
-        """on_connect subscribes to Z2M door sensor topics with QoS 1."""
+    def test_on_connect_does_not_subscribe_z2m_topics(self, env_vars):
+        """on_connect subscribe list does NOT contain any zigbee topic."""
         rc = _load_controller(env_vars)
         client = MagicMock()
         reason_code = MagicMock()
@@ -138,12 +139,8 @@ class TestOnConnect:
         client.subscribe.assert_called_once()
         sub_args = client.subscribe.call_args[0][0]
         topics = [t[0] for t in sub_args]
-        assert "zigbee2mqtt/door_1_sensor" in topics
-        assert "zigbee2mqtt/door_2_sensor" in topics
-        # QoS 1 for Z2M topics
-        z2m_topics = [(t, q) for t, q in sub_args if "zigbee2mqtt" in t]
-        for t, qos in z2m_topics:
-            assert qos == 1
+        for topic in topics:
+            assert "zigbee" not in topic, f"Unexpected Z2M subscription: {topic}"
 
     def test_on_connect_skips_on_failure(self, env_vars):
         """If reason_code.is_failure is True, on_connect does not publish or subscribe."""
