@@ -1,0 +1,35 @@
+# Zigbee2MQTT configuration for pi-three garage controller
+# Deploy to: /opt/zigbee2mqtt/data/configuration.yaml
+#
+# BEFORE FIRST USE:
+# 1. Replace <MQTT_PASSWORD> with the HiveMQ Cloud password (same as garage-controller secrets.env MQTT_PASS)
+# 2. Replace <DONGLE_SERIAL> with the actual serial from: ls /dev/serial/by-id/
+# 3. Set permit_join: true temporarily when pairing sensors, then set back to false
+
+homeassistant:
+  enabled: true
+
+permit_join: false
+
+mqtt:
+  base_topic: zigbee2mqtt
+  server: 'mqtts://618185f1c9a74d5c93aaeb133c4f1894.s1.eu.hivemq.cloud'
+  user: canaduino
+  password: '<MQTT_PASSWORD>'
+  client_id: 'zigbee2mqtt-pi-three'
+
+serial:
+  port: '/dev/serial/by-id/usb-ITead_Sonoff_Zigbee_3.0_USB_Dongle_Plus_<DONGLE_SERIAL>-if00-port0'
+  adapter: ember
+
+advanced:
+  cache_state: true
+  cache_state_persistent: true
+  cache_state_send_on_startup: true
+  channel: 25
+
+device_options:
+  retain: true
+
+availability:
+  enabled: true

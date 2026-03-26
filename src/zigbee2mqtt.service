@@ -1,0 +1,21 @@
+[Unit]
+Description=zigbee2mqtt
+After=network.target
+Wants=network.target
+
+[Service]
+Type=notify
+User=caseman
+WorkingDirectory=/opt/zigbee2mqtt
+Environment=NODE_ENV=production
+ExecStart=/usr/bin/node index.js
+WatchdogSec=10s
+Restart=always
+RestartSec=10
+StartLimitIntervalSec=60
+StartLimitBurst=5
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target
