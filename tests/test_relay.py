@@ -67,27 +67,6 @@ class TestPulseRelay:
         finally:
             lock.release()
 
-    def test_pulse_relay_door1_and_door2_independent(self, env_vars, mock_gpiod):
-        """pulse_relay(17) and pulse_relay(27) can run concurrently (different locks)."""
-        rc = _load_controller(env_vars)
-
-        results = []
-
-        def pulse_and_record(pin):
-            with patch.object(rc, "PULSE_DURATION", 0.05):
-                rc.pulse_relay(pin)
-            results.append(pin)
-
-        t1 = threading.Thread(target=pulse_and_record, args=(17,))
-        t2 = threading.Thread(target=pulse_and_record, args=(27,))
-        t1.start()
-        t2.start()
-        t1.join(timeout=5)
-        t2.join(timeout=5)
-
-        assert sorted(results) == [17, 27]
-
-
 class TestOnMessage:
     """Tests for on_message callback."""
 
@@ -105,8 +84,22 @@ class TestOnMessage:
             time.sleep(0.1)
             mock_pulse.assert_called_with(17)
 
-    def test_on_message_door2_topic(self, env_vars):
-        """on_message with door_2 command topic triggers pulse_relay with GPIO_DOOR2 (27)."""
+    def test_on_message_door2_publishes_mqtt(self, env_vars):
+        """on_message with door_2 command topic publishes PRESS to chamber-remote via MQTT."""
+        rc = _load_controller(env_vars)
+        client = MagicMock()
+        msg = MagicMock()
+        msg.topic = "garage-controller/button/door_2/command"
+        msg.payload = b"PRESS"
+
+        rc.on_message(client, None, msg)
+
+        client.publish.assert_called_once_with(
+            "chamber-remote/button/move_door/command", "PRESS", qos=1
+        )
+
+    def test_on_message_door2_does_not_pulse_gpio(self, env_vars):
+        """on_message with door_2 command topic does NOT call pulse_relay."""
         rc = _load_controller(env_vars)
         client = MagicMock()
         msg = MagicMock()
@@ -116,7 +109,7 @@ class TestOnMessage:
         with patch.object(rc, "pulse_relay") as mock_pulse:
             rc.on_message(client, None, msg)
             time.sleep(0.1)
-            mock_pulse.assert_called_with(27)
+            mock_pulse.assert_not_called()
 
     def test_on_message_unknown_topic(self, env_vars):
         """on_message with unknown topic does NOT trigger any pulse."""
@@ -131,8 +124,7 @@ class TestOnMessage:
             time.sleep(0.1)
             mock_pulse.assert_not_called()
 
-    def test_relay_pins_in_bcm_9_27_range(self, env_vars):
-        """GPIO_DOOR1 and GPIO_DOOR2 are both in range 9-27."""
+    def test_relay_pin_in_bcm_9_27_range(self, env_vars):
+        """GPIO_DOOR1 is in range 9-27."""
         rc = _load_controller(env_vars)
         assert 9 <= rc.GPIO_DOOR1 <= 27, f"GPIO_DOOR1={rc.GPIO_DOOR1} not in 9-27 range"
-        assert 9 <= rc.GPIO_DOOR2 <= 27, f"GPIO_DOOR2={rc.GPIO_DOOR2} not in 9-27 range"

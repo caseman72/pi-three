@@ -126,6 +126,25 @@ class TestOnConnect:
             rc.on_connect(client, None, MagicMock(), reason_code, None)
             mock_disc.assert_called_once_with(client)
 
+    def test_on_connect_subscribes_z2m_topics(self, env_vars):
+        """on_connect subscribes to Z2M door sensor topics with QoS 1."""
+        rc = _load_controller(env_vars)
+        client = MagicMock()
+        reason_code = MagicMock()
+        reason_code.is_failure = False
+
+        rc.on_connect(client, None, MagicMock(), reason_code, None)
+
+        client.subscribe.assert_called_once()
+        sub_args = client.subscribe.call_args[0][0]
+        topics = [t[0] for t in sub_args]
+        assert "zigbee2mqtt/door_1_sensor" in topics
+        assert "zigbee2mqtt/door_2_sensor" in topics
+        # QoS 1 for Z2M topics
+        z2m_topics = [(t, q) for t, q in sub_args if "zigbee2mqtt" in t]
+        for t, qos in z2m_topics:
+            assert qos == 1
+
     def test_on_connect_skips_on_failure(self, env_vars):
         """If reason_code.is_failure is True, on_connect does not publish or subscribe."""
         rc = _load_controller(env_vars)

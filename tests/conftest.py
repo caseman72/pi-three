@@ -64,6 +64,5 @@ def env_vars(monkeypatch):
     monkeypatch.setenv("MQTT_USER", "testuser")
     monkeypatch.setenv("MQTT_PASS", "testpass")
     monkeypatch.setenv("GPIO_DOOR1", "17")
-    monkeypatch.setenv("GPIO_DOOR2", "27")
     monkeypatch.setenv("GPIO_DHT", "4")
     monkeypatch.setenv("DHT_INTERVAL", "60")
