@@ -1,15 +1,15 @@
 # Pi-Three Garage Controller
 
-MQTT-controlled garage door relay service for Raspberry Pi 3B+. Pulses GPIO relays to trigger wireless garage door remotes, with Home Assistant auto-discovery.
+Raspberry Pi 3B+ garage door controller with Zigbee state sensing and Home Assistant cover entities. Controls two garage doors via MQTT — Door 1 through a local GPIO relay, Door 2 through a remote ESP32 (chamber-remote) — with live open/closed state from Zigbee tilt sensors.
 
 ## Features
 
-- **2-door relay control** via MQTT commands (503ms momentary pulse)
+- **HA cover entities** — garage door UI with open/close/stop and live state
+- **Zigbee door state** — Third Reality tilt sensors via Zigbee2MQTT
+- **Dual-door control** — Door 1 via GPIO relay, Door 2 via MQTT to ESP32
 - **HiveMQ Cloud** MQTT with TLS and LWT availability
-- **HA auto-discovery** — ESPHome-style button entities appear automatically
 - **Safe GPIO** — BCM 9-27 range only (avoids boot-HIGH on BCM 0-8)
-- **Per-door locking** — prevents double-pulse during active relay
-- **systemd service** — auto-start, crash recovery, runs as non-root user
+- **systemd services** — garage-controller + zigbee2mqtt, auto-start, crash recovery
 
 ## Architecture
 
@@ -19,18 +19,22 @@ Home Assistant (Mac Mini)
     v
 Cloud MQTT Broker (HiveMQ)
     |
-    v
-Raspberry Pi 3B+ (Ethernet)
+    +---> Raspberry Pi 3B+ (Ethernet)
+    |         |
+    |         +-- garage-controller.service (MQTT client)
+    |         |       Door 1: GPIO relay -> wireless remote -> opener
+    |         |       Door 2: MQTT publish -> chamber-remote ESP32
+    |         |
+    |         +-- zigbee2mqtt.service (Zigbee coordinator)
+    |                 SONOFF Dongle -> tilt sensors -> state to MQTT
     |
-    v
-GPIO -> Relay Module -> Wireless Remote -> Garage Door Opener
+    +---> Chamber Remote ESP32 (WiFi)
+              Door 2: relay -> garage door opener
 ```
 
 ## Setup
 
 ### 1. Configure
-
-Copy the example files and fill in your values:
 
 ```bash
 cp src/config.env.example /opt/garage-controller/config.env
@@ -38,23 +42,33 @@ cp src/secrets.env.example /opt/garage-controller/secrets.env
 chmod 600 /opt/garage-controller/secrets.env
 ```
 
-Edit `config.env` with your MQTT broker address and GPIO pins.
+Edit `config.env` with your MQTT broker address and GPIO pin.
 Edit `secrets.env` with your MQTT credentials.
 
-### 2. Deploy
+### 2. Install Zigbee2MQTT
+
+```bash
+sudo mkdir -p /opt/zigbee2mqtt && sudo chown $USER:$USER /opt/zigbee2mqtt
+git clone --depth 1 https://github.com/Koenkk/zigbee2mqtt.git /opt/zigbee2mqtt
+cd /opt/zigbee2mqtt && pnpm install --frozen-lockfile
+```
+
+### 3. Deploy
 
 ```bash
 src/deploy.sh
 ```
 
-This creates a Python venv on the Pi, installs dependencies, sets up the systemd service, and starts it.
+Deploys both garage-controller and zigbee2mqtt services, patches Z2M config, and handles USB autosuspend.
 
-### 3. Verify
+### 4. Pair Sensors
 
+Enable pairing via MQTT:
 ```bash
-ssh pi-three "systemctl status garage-controller"
-ssh pi-three "journalctl -u garage-controller -f"
+mosquitto_pub -t 'zigbee/bridge/request/permit_join' -m '{"time": 120}'
 ```
+
+Press the pairing button on each tilt sensor. Rename in Z2M to `door_1_sensor` and `door_2_sensor`.
 
 ## MQTT Topics
 
@@ -62,8 +76,10 @@ ssh pi-three "journalctl -u garage-controller -f"
 |-------|-----------|---------|
 | `garage-controller/status` | Pi -> Broker | `online` / `offline` |
 | `garage-controller/button/door_1/command` | Broker -> Pi | `PRESS` |
-| `garage-controller/button/door_2/command` | Broker -> Pi | `PRESS` |
-| `homeassistant/button/garage-controller/*/config` | Pi -> Broker | HA discovery JSON |
+| `garage-controller/button/door_2/command` | Broker -> Pi | `PRESS` (forwarded to chamber-remote) |
+| `zigbee/door_1_sensor` | Z2M -> Broker | `{"contact": true/false, "battery": N, ...}` |
+| `zigbee/door_2_sensor` | Z2M -> Broker | `{"contact": true/false, "battery": N, ...}` |
+| `homeassistant/cover/garage-controller/*/config` | Pi -> Broker | HA cover discovery JSON |
 
 ## Tests
 
@@ -74,9 +90,11 @@ python3 -m pytest tests/ -v
 ## Hardware
 
 - Raspberry Pi 3B+ (headless, Ethernet)
-- 2-channel relay module
-- Wireless garage door remotes (Liftmaster-compatible)
-- SONOFF Zigbee 3.0 Dongle Lite (Phase 2 — door state sensing)
+- Relay module (1-channel, Door 1 only)
+- Wireless garage door remote (Liftmaster-compatible)
+- SONOFF Zigbee 3.0 Dongle Lite (EFR32MG21) via USB extension cable
+- 2x Third Reality Garage Door Tilt Sensors (3RDTS01056Z)
+- Chamber Remote ESP32 (ESPHome, controls Door 2)
 
 ## License
 
