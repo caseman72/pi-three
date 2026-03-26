@@ -16,6 +16,7 @@ echo "Copying application files..."
 scp "${SCRIPT_DIR}/relay_controller.py" "${PI_HOST}:${REMOTE_DIR}/relay_controller.py"
 scp "${SCRIPT_DIR}/requirements.txt" "${PI_HOST}:${REMOTE_DIR}/requirements.txt"
 scp "${SCRIPT_DIR}/config.env.example" "${PI_HOST}:${REMOTE_DIR}/config.env.example"
+scp "${SCRIPT_DIR}/cleanup-stale-topics.sh" "${PI_HOST}:${REMOTE_DIR}/cleanup-stale-topics.sh"
 
 # 3. Create config.env from example if it doesn't exist
 ssh "${PI_HOST}" "test -f ${REMOTE_DIR}/config.env || cp ${REMOTE_DIR}/config.env.example ${REMOTE_DIR}/config.env"
@@ -100,6 +101,17 @@ else
         scp "${SCRIPT_DIR}/zigbee2mqtt-configuration.yaml" "${PI_HOST}:${Z2M_DIR}/data/configuration.yaml"
         echo "  Copied template — edit ${Z2M_DIR}/data/configuration.yaml on Pi to set password and dongle serial"
     }
+
+    # 10a. Patch Z2M base_topic if needed (idempotent)
+    echo "Checking Z2M base_topic..."
+    CURRENT_TOPIC=$(ssh "${PI_HOST}" "grep 'base_topic:' ${Z2M_DIR}/data/configuration.yaml 2>/dev/null | awk '{print \$2}'" || echo "")
+    if [ "$CURRENT_TOPIC" != "zigbee" ]; then
+        echo "  Updating base_topic from '${CURRENT_TOPIC}' to 'zigbee'..."
+        ssh "${PI_HOST}" "sed -i 's/base_topic: .*/base_topic: zigbee/' ${Z2M_DIR}/data/configuration.yaml"
+        echo "  base_topic updated. Z2M restart required."
+    else
+        echo "  base_topic already set to 'zigbee'"
+    fi
 
     # 11. Install Z2M systemd service
     echo "Installing zigbee2mqtt systemd service..."
