@@ -12,13 +12,13 @@
 
 set -euo pipefail
 
-BROKER="618185f1c9a74d5c93aaeb133c4f1894.s1.eu.hivemq.cloud"
+BROKER="${MQTT_BROKER:?MQTT_BROKER must be set (source config.env)}"
 PORT=8883
 CA="/etc/ssl/certs/ca-certificates.crt"
 
 if [ -z "${MQTT_USER:-}" ] || [ -z "${MQTT_PASS:-}" ]; then
-    echo "ERROR: MQTT_USER and MQTT_PASS must be set."
-    echo "  source /opt/garage-controller/secrets.env"
+    echo "ERROR: MQTT_BROKER, MQTT_USER, and MQTT_PASS must be set."
+    echo "  source /opt/garage-controller/config.env && source /opt/garage-controller/secrets.env"
     exit 1
 fi
 
