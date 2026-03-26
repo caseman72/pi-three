@@ -12,7 +12,7 @@ homeassistant:
 permit_join: false
 
 mqtt:
-  base_topic: zigbee2mqtt
+  base_topic: zigbee
   server: 'mqtts://618185f1c9a74d5c93aaeb133c4f1894.s1.eu.hivemq.cloud'
   user: canaduino
   password: '<MQTT_PASSWORD>'

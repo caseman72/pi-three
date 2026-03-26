@@ -1,9 +1,8 @@
-"""Garage controller service: MQTT relay pulse + door state bridge + HA discovery.
+"""Garage controller service: MQTT relay pulse + HA cover discovery.
 
 Subscribes to MQTT door command topics, pulses GPIO relay for Door 1,
-bridges Door 2 commands to chamber-remote ESP32 via MQTT, subscribes to
-Zigbee2MQTT door sensor state and re-publishes to garage-controller namespace.
-Publishes HA discovery configs and handles availability via LWT/birth messages.
+bridges Door 2 commands to chamber-remote ESP32 via MQTT.
+Publishes HA MQTT cover discovery configs and handles availability via LWT/birth messages.
 
 Designed to run as a systemd service on a Raspberry Pi 3B+.
 """
@@ -43,10 +42,6 @@ AVAIL_TOPIC = "garage-controller/status"
 DOOR1_CMD = "garage-controller/button/door_1/command"
 DOOR2_CMD = "garage-controller/button/door_2/command"
 DOOR2_REMOTE_CMD = "chamber-remote/button/move_door/command"
-Z2M_DOOR1_STATE = "zigbee2mqtt/door_1_sensor"
-Z2M_DOOR2_STATE = "zigbee2mqtt/door_2_sensor"
-DOOR1_STATE_TOPIC = "garage-controller/binary_sensor/door_1_contact/state"
-DOOR2_STATE_TOPIC = "garage-controller/binary_sensor/door_2_contact/state"
 
 # Per-door locks — initialized by load_config()
 _door_locks = {}
@@ -105,31 +100,11 @@ def pulse_relay(pin):
 
 
 # ---------------------------------------------------------------------------
-# Z2M door state bridge
-# ---------------------------------------------------------------------------
-
-def _handle_door_state(client, message):
-    """Parse Z2M contact sensor payload and re-publish to garage-controller state topic."""
-    try:
-        payload = json.loads(message.payload)
-        contact = payload.get("contact")
-        if contact is None:
-            return  # Not a contact update (could be battery-only update)
-        door_id = "door_1" if "door_1_sensor" in message.topic else "door_2"
-        state = "closed" if contact else "open"
-        out_topic = f"garage-controller/binary_sensor/{door_id}_contact/state"
-        client.publish(out_topic, state, qos=1, retain=True)
-        log.info("Door %s: %s (Z2M contact=%s)", door_id, state, contact)
-    except (json.JSONDecodeError, KeyError, TypeError) as e:
-        log.warning("Door state parse error on %s: %s", message.topic, e)
-
-
-# ---------------------------------------------------------------------------
 # HA MQTT discovery
 # ---------------------------------------------------------------------------
 
 def publish_discovery(client):
-    """Publish Home Assistant MQTT discovery configs for doors and sensors."""
+    """Publish Home Assistant MQTT discovery configs for garage door covers."""
     device = {
         "ids": ["garage-controller"],
         "name": "Garage Controller",
@@ -137,13 +112,25 @@ def publish_discovery(client):
         "mdl": "3B+",
     }
 
-    # Door buttons
-    for door_id, door_name in [("door_1", "Garage Door 1"), ("door_2", "Garage Door 2")]:
+    doors = [
+        ("door_1", "Garage Door 1", "zigbee/door_1_sensor"),
+        ("door_2", "Garage Door 2", "zigbee/door_2_sensor"),
+    ]
+
+    for door_id, door_name, state_topic in doors:
         config = {
-            "unique_id": f"garage-controller-{door_id}",
+            "unique_id": f"garage-controller-cover-{door_id}",
             "name": door_name,
+            "device_class": "garage",
+            "state_topic": state_topic,
+            "value_template": "{{ 'closed' if value_json.contact else 'open' }}",
+            "state_open": "open",
+            "state_closed": "closed",
             "command_topic": f"garage-controller/button/{door_id}/command",
-            "payload_press": "PRESS",
+            "payload_open": "PRESS",
+            "payload_close": "PRESS",
+            "payload_stop": "PRESS",
+            "optimistic": False,
             "availability_topic": AVAIL_TOPIC,
             "payload_available": "online",
             "payload_not_available": "offline",
@@ -151,12 +138,12 @@ def publish_discovery(client):
             "device": device,
         }
         client.publish(
-            f"homeassistant/button/garage-controller/{door_id}/config",
+            f"homeassistant/cover/garage-controller/{door_id}/config",
             json.dumps(config),
             retain=True,
         )
 
-    log.info("Published HA discovery configs")
+    log.info("Published HA cover discovery configs")
 
 
 # ---------------------------------------------------------------------------
@@ -174,13 +161,10 @@ def on_connect(client, userdata, connect_flags, reason_code, properties):
     # Birth message
     client.publish(AVAIL_TOPIC, "online", qos=1, retain=True)
 
-    # Subscribe to door command topics and Z2M state topics
-    # (inside on_connect to survive reconnection and receive retained state)
+    # Subscribe to door command topics only -- HA reads Z2M state directly
     client.subscribe([
         (DOOR1_CMD, 1),
         (DOOR2_CMD, 1),
-        (Z2M_DOOR1_STATE, 1),
-        (Z2M_DOOR2_STATE, 1),
     ])
 
     # Publish HA discovery configs
@@ -188,15 +172,13 @@ def on_connect(client, userdata, connect_flags, reason_code, properties):
 
 
 def on_message(client, userdata, message):
-    """Handle incoming MQTT messages — dispatch commands and Z2M state updates."""
+    """Handle incoming MQTT messages — dispatch door commands."""
     if message.topic == DOOR1_CMD:
         log.info("Door 1: pulsing local relay BCM %d", GPIO_DOOR1)
         threading.Thread(target=pulse_relay, args=(GPIO_DOOR1,), daemon=True).start()
     elif message.topic == DOOR2_CMD:
         log.info("Door 2: forwarding to chamber-remote via MQTT")
         client.publish(DOOR2_REMOTE_CMD, "PRESS", qos=1)
-    elif message.topic in (Z2M_DOOR1_STATE, Z2M_DOOR2_STATE):
-        _handle_door_state(client, message)
     else:
         log.warning("Unknown topic: %s", message.topic)
 
