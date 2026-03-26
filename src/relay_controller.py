@@ -1,7 +1,9 @@
-"""Garage controller service: MQTT relay pulse + HA discovery.
+"""Garage controller service: MQTT relay pulse + door state bridge + HA discovery.
 
-Subscribes to MQTT door command topics, pulses GPIO relays for garage doors,
-publishes HA discovery configs, and handles availability via LWT/birth messages.
+Subscribes to MQTT door command topics, pulses GPIO relay for Door 1,
+bridges Door 2 commands to chamber-remote ESP32 via MQTT, subscribes to
+Zigbee2MQTT door sensor state and re-publishes to garage-controller namespace.
+Publishes HA discovery configs and handles availability via LWT/birth messages.
 
 Designed to run as a systemd service on a Raspberry Pi 3B+.
 """
@@ -35,12 +37,16 @@ PORT = 8883
 USER = ""
 PASS = ""
 GPIO_DOOR1 = 17
-GPIO_DOOR2 = 27
 # Constants (not configurable)
 PULSE_DURATION = 0.503
 AVAIL_TOPIC = "garage-controller/status"
 DOOR1_CMD = "garage-controller/button/door_1/command"
 DOOR2_CMD = "garage-controller/button/door_2/command"
+DOOR2_REMOTE_CMD = "chamber-remote/button/move_door/command"
+Z2M_DOOR1_STATE = "zigbee2mqtt/door_1_sensor"
+Z2M_DOOR2_STATE = "zigbee2mqtt/door_2_sensor"
+DOOR1_STATE_TOPIC = "garage-controller/binary_sensor/door_1_contact/state"
+DOOR2_STATE_TOPIC = "garage-controller/binary_sensor/door_2_contact/state"
 
 # Per-door locks — initialized by load_config()
 _door_locks = {}
@@ -50,7 +56,7 @@ log = logging.getLogger(__name__)
 
 def load_config():
     """Read configuration from environment variables and initialize module state."""
-    global BROKER, PORT, USER, PASS, GPIO_DOOR1, GPIO_DOOR2
+    global BROKER, PORT, USER, PASS, GPIO_DOOR1
     global _door_locks
 
     BROKER = os.environ.get("MQTT_BROKER", "")
@@ -58,9 +64,8 @@ def load_config():
     USER = os.environ.get("MQTT_USER", "")
     PASS = os.environ.get("MQTT_PASS", "")
     GPIO_DOOR1 = int(os.environ.get("GPIO_DOOR1", "17"))
-    GPIO_DOOR2 = int(os.environ.get("GPIO_DOOR2", "27"))
 
-    _door_locks = {GPIO_DOOR1: threading.Lock(), GPIO_DOOR2: threading.Lock()}
+    _door_locks = {GPIO_DOOR1: threading.Lock()}
 
 
 # ---------------------------------------------------------------------------
@@ -97,6 +102,26 @@ def pulse_relay(pin):
         log.exception("Error pulsing relay on BCM %d", pin)
     finally:
         lock.release()
+
+
+# ---------------------------------------------------------------------------
+# Z2M door state bridge
+# ---------------------------------------------------------------------------
+
+def _handle_door_state(client, message):
+    """Parse Z2M contact sensor payload and re-publish to garage-controller state topic."""
+    try:
+        payload = json.loads(message.payload)
+        contact = payload.get("contact")
+        if contact is None:
+            return  # Not a contact update (could be battery-only update)
+        door_id = "door_1" if "door_1_sensor" in message.topic else "door_2"
+        state = "closed" if contact else "open"
+        out_topic = f"garage-controller/binary_sensor/{door_id}_contact/state"
+        client.publish(out_topic, state, qos=1, retain=True)
+        log.info("Door %s: %s (Z2M contact=%s)", door_id, state, contact)
+    except (json.JSONDecodeError, KeyError, TypeError) as e:
+        log.warning("Door state parse error on %s: %s", message.topic, e)
 
 
 # ---------------------------------------------------------------------------
@@ -149,26 +174,31 @@ def on_connect(client, userdata, connect_flags, reason_code, properties):
     # Birth message
     client.publish(AVAIL_TOPIC, "online", qos=1, retain=True)
 
-    # Subscribe to door command topics (inside on_connect to survive reconnection)
-    client.subscribe([(DOOR1_CMD, 1), (DOOR2_CMD, 1)])
+    # Subscribe to door command topics and Z2M state topics
+    # (inside on_connect to survive reconnection and receive retained state)
+    client.subscribe([
+        (DOOR1_CMD, 1),
+        (DOOR2_CMD, 1),
+        (Z2M_DOOR1_STATE, 1),
+        (Z2M_DOOR2_STATE, 1),
+    ])
 
     # Publish HA discovery configs
     publish_discovery(client)
 
 
 def on_message(client, userdata, message):
-    """Handle incoming MQTT messages — dispatch door commands to relay threads."""
-    topic_to_pin = {
-        DOOR1_CMD: GPIO_DOOR1,
-        DOOR2_CMD: GPIO_DOOR2,
-    }
-
-    pin = topic_to_pin.get(message.topic)
-    if pin is not None:
-        log.info("Received command on %s — triggering relay on BCM %d", message.topic, pin)
-        threading.Thread(target=pulse_relay, args=(pin,), daemon=True).start()
+    """Handle incoming MQTT messages — dispatch commands and Z2M state updates."""
+    if message.topic == DOOR1_CMD:
+        log.info("Door 1: pulsing local relay BCM %d", GPIO_DOOR1)
+        threading.Thread(target=pulse_relay, args=(GPIO_DOOR1,), daemon=True).start()
+    elif message.topic == DOOR2_CMD:
+        log.info("Door 2: forwarding to chamber-remote via MQTT")
+        client.publish(DOOR2_REMOTE_CMD, "PRESS", qos=1)
+    elif message.topic in (Z2M_DOOR1_STATE, Z2M_DOOR2_STATE):
+        _handle_door_state(client, message)
     else:
-        log.warning("Received message on unknown topic: %s", message.topic)
+        log.warning("Unknown topic: %s", message.topic)
 
 
 # ---------------------------------------------------------------------------
