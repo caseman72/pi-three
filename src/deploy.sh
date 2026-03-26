@@ -3,6 +3,7 @@ set -euo pipefail
 
 PI_HOST="pi-three"
 REMOTE_DIR="/opt/garage-controller"
+Z2M_DIR="/opt/zigbee2mqtt"
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 
 echo "=== Deploying garage-controller to ${PI_HOST} ==="
@@ -66,6 +67,77 @@ echo ""
 echo "=== Recent Logs ==="
 ssh "${PI_HOST}" "journalctl -u garage-controller.service -n 20 --no-pager" || true
 
+# ================================================================
+# Zigbee2MQTT Configuration
+# ================================================================
+
+echo ""
+echo "=== Deploying Zigbee2MQTT configuration ==="
+
+# 9. Check if Z2M is installed
+if ! ssh "${PI_HOST}" "test -d ${Z2M_DIR}"; then
+    echo ""
+    echo "WARNING: ${Z2M_DIR} not found on ${PI_HOST}."
+    echo "Install Zigbee2MQTT first:"
+    echo "  ssh ${PI_HOST}"
+    echo "  sudo apt-get install -y git make g++ gcc libsystemd-dev"
+    echo "  sudo curl -fsSL https://deb.nodesource.com/setup_lts.x | sudo -E bash -"
+    echo "  sudo apt-get install -y nodejs"
+    echo "  corepack enable"
+    echo "  sudo mkdir -p ${Z2M_DIR} && sudo chown caseman:caseman ${Z2M_DIR}"
+    echo "  git clone --depth 1 https://github.com/Koenkk/zigbee2mqtt.git ${Z2M_DIR}"
+    echo "  cd ${Z2M_DIR} && pnpm install --frozen-lockfile"
+    echo ""
+    echo "Skipping Z2M config deployment."
+else
+    # 10. Copy Z2M configuration template (don't overwrite if exists)
+    echo "Copying Z2M configuration template..."
+    ssh "${PI_HOST}" "mkdir -p ${Z2M_DIR}/data"
+    ssh "${PI_HOST}" "test -f ${Z2M_DIR}/data/configuration.yaml" && {
+        echo "  Z2M configuration.yaml already exists — skipping (won't overwrite)"
+        echo "  To force update: ssh ${PI_HOST} 'cp ${Z2M_DIR}/data/configuration.yaml ${Z2M_DIR}/data/configuration.yaml.bak'"
+    } || {
+        scp "${SCRIPT_DIR}/zigbee2mqtt-configuration.yaml" "${PI_HOST}:${Z2M_DIR}/data/configuration.yaml"
+        echo "  Copied template — edit ${Z2M_DIR}/data/configuration.yaml on Pi to set password and dongle serial"
+    }
+
+    # 11. Install Z2M systemd service
+    echo "Installing zigbee2mqtt systemd service..."
+    scp "${SCRIPT_DIR}/zigbee2mqtt.service" "${PI_HOST}:/tmp/zigbee2mqtt.service"
+    ssh "${PI_HOST}" "
+        sudo mv /tmp/zigbee2mqtt.service /etc/systemd/system/zigbee2mqtt.service
+        sudo systemctl daemon-reload
+        sudo systemctl enable zigbee2mqtt.service
+    "
+
+    # 12. Restart Z2M if dongle is present
+    if ssh "${PI_HOST}" "ls /dev/serial/by-id/*Zigbee* 2>/dev/null || ls /dev/ttyACM0 2>/dev/null" > /dev/null 2>&1; then
+        echo "Restarting zigbee2mqtt service..."
+        ssh "${PI_HOST}" "sudo systemctl restart zigbee2mqtt.service"
+        sleep 5
+        echo ""
+        echo "=== Z2M Service Status ==="
+        ssh "${PI_HOST}" "systemctl status zigbee2mqtt.service --no-pager" || true
+    else
+        echo "No Zigbee dongle detected — zigbee2mqtt service enabled but not started"
+        echo "Plug in the SONOFF dongle and run: ssh ${PI_HOST} 'sudo systemctl start zigbee2mqtt'"
+    fi
+fi
+
+# 13. Disable USB autosuspend (prevents Zigbee dongle going to sleep)
+echo ""
+echo "Checking USB autosuspend..."
+if ssh "${PI_HOST}" "grep -q 'usbcore.autosuspend=-1' /boot/cmdline.txt 2>/dev/null || grep -q 'usbcore.autosuspend=-1' /boot/firmware/cmdline.txt 2>/dev/null"; then
+    echo "  USB autosuspend already disabled"
+else
+    echo "  NOTE: USB autosuspend not disabled. To prevent Zigbee dongle sleep issues, run:"
+    echo "  ssh ${PI_HOST}"
+    CMDLINE_PATH=$(ssh "${PI_HOST}" "test -f /boot/firmware/cmdline.txt && echo /boot/firmware/cmdline.txt || echo /boot/cmdline.txt")
+    echo "  sudo sed -i 's/\$/ usbcore.autosuspend=-1/' ${CMDLINE_PATH}"
+    echo "  sudo reboot"
+fi
+
 echo ""
 echo "Deploy complete. Check logs with:"
 echo "  ssh ${PI_HOST} 'journalctl -u garage-controller.service -f'"
+echo "  ssh ${PI_HOST} 'journalctl -u zigbee2mqtt.service -f'"
