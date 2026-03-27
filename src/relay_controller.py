@@ -37,7 +37,7 @@ USER = ""
 PASS = ""
 GPIO_DOOR1 = 27
 # Constants (not configurable)
-PULSE_DURATION = 0.503
+PULSE_DURATION = 0.750
 AVAIL_TOPIC = "garage-controller/status"
 DOOR1_CMD = "garage-controller/button/door_1/command"
 DOOR2_CMD = "garage-controller/button/door_2/command"
