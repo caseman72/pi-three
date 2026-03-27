@@ -35,7 +35,7 @@ BROKER = ""
 PORT = 8883
 USER = ""
 PASS = ""
-GPIO_DOOR1 = 17
+GPIO_DOOR1 = 27
 # Constants (not configurable)
 PULSE_DURATION = 0.503
 AVAIL_TOPIC = "garage-controller/status"
@@ -58,7 +58,7 @@ def load_config():
     PORT = int(os.environ.get("MQTT_PORT", "8883"))
     USER = os.environ.get("MQTT_USER", "")
     PASS = os.environ.get("MQTT_PASS", "")
-    GPIO_DOOR1 = int(os.environ.get("GPIO_DOOR1", "17"))
+    GPIO_DOOR1 = int(os.environ.get("GPIO_DOOR1", "27"))
 
     _door_locks = {GPIO_DOOR1: threading.Lock()}
 
