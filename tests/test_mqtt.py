@@ -110,8 +110,8 @@ class TestOnConnect:
         sub_args = client.subscribe.call_args[0][0]
         assert len(sub_args) == 2, f"Expected 2 subscriptions, got {len(sub_args)}"
         topics = [t[0] for t in sub_args]
-        assert "garage-controller/button/door_1/command" in topics
-        assert "garage-controller/button/door_2/command" in topics
+        assert "garage-controller/button/garage_door_1/command" in topics
+        assert "garage-controller/button/garage_door_2/command" in topics
         # QoS 1
         for t, qos in sub_args:
             assert qos == 1

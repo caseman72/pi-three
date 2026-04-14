@@ -39,9 +39,15 @@ GPIO_DOOR1 = 27
 # Constants (not configurable)
 PULSE_DURATION = 0.750
 AVAIL_TOPIC = "garage-controller/status"
-DOOR1_CMD = "garage-controller/button/door_1/command"
-DOOR2_CMD = "garage-controller/button/door_2/command"
+DOOR1_CMD = "garage-controller/button/garage_door_1/command"
+DOOR2_CMD = "garage-controller/button/garage_door_2/command"
 DOOR2_REMOTE_CMD = "chamber-remote/button/move_door/command"
+
+# Old discovery topics to clear on connect (prevents name stacking after renames)
+_STALE_DISCOVERY = [
+    "homeassistant/cover/garage-controller/door_1/config",
+    "homeassistant/cover/garage-controller/door_2/config",
+]
 
 # Per-door locks — initialized by load_config()
 _door_locks = {}
@@ -113,8 +119,8 @@ def publish_discovery(client):
     }
 
     doors = [
-        ("door_1", "Garage Door 1", "zigbee/door_1_sensor"),
-        ("door_2", "Garage Door 2", "zigbee/door_2_sensor"),
+        ("garage_door_1", "Garage Door 1", "zigbee-garage/garage_door_1"),
+        ("garage_door_2", "Garage Door 2", "zigbee-garage/garage_door_2"),
     ]
 
     for door_id, door_name, state_topic in doors:
@@ -166,6 +172,12 @@ def on_connect(client, userdata, connect_flags, reason_code, properties):
         (DOOR1_CMD, 1),
         (DOOR2_CMD, 1),
     ])
+
+    # Clear stale discovery topics from previous renames
+    for topic in _STALE_DISCOVERY:
+        client.publish(topic, payload=b"", qos=1, retain=True)
+    if _STALE_DISCOVERY:
+        log.info("Cleared %d stale discovery topics", len(_STALE_DISCOVERY))
 
     # Publish HA discovery configs
     publish_discovery(client)

@@ -65,20 +65,20 @@ Deploys both garage-controller and zigbee2mqtt services, patches Z2M config, and
 
 Enable pairing via MQTT:
 ```bash
-mosquitto_pub -t 'zigbee/bridge/request/permit_join' -m '{"time": 120}'
+mosquitto_pub -t 'zigbee-garage/bridge/request/permit_join' -m '{"time": 120}'
 ```
 
-Press the pairing button on each tilt sensor. Rename in Z2M to `door_1_sensor` and `door_2_sensor`.
+Press the pairing button on each tilt sensor. Rename in Z2M to `garage_door_1` and `garage_door_2`.
 
 ## MQTT Topics
 
 | Topic | Direction | Payload |
 |-------|-----------|---------|
 | `garage-controller/status` | Pi -> Broker | `online` / `offline` |
-| `garage-controller/button/door_1/command` | Broker -> Pi | `PRESS` |
-| `garage-controller/button/door_2/command` | Broker -> Pi | `PRESS` (forwarded to chamber-remote) |
-| `zigbee/door_1_sensor` | Z2M -> Broker | `{"contact": true/false, "battery": N, ...}` |
-| `zigbee/door_2_sensor` | Z2M -> Broker | `{"contact": true/false, "battery": N, ...}` |
+| `garage-controller/button/garage_door_1/command` | Broker -> Pi | `PRESS` |
+| `garage-controller/button/garage_door_2/command` | Broker -> Pi | `PRESS` (forwarded to chamber-remote) |
+| `zigbee-garage/garage_door_1` | Z2M -> Broker | `{"contact": true/false, "battery": N, ...}` |
+| `zigbee-garage/garage_door_2` | Z2M -> Broker | `{"contact": true/false, "battery": N, ...}` |
 | `homeassistant/cover/garage-controller/*/config` | Pi -> Broker | HA cover discovery JSON |
 
 ## Tests

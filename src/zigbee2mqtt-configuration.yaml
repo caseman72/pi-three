@@ -12,7 +12,7 @@ homeassistant:
 permit_join: false
 
 mqtt:
-  base_topic: zigbee
+  base_topic: zigbee-garage
   server: 'mqtts://your_broker.hivemq.cloud'
   user: '<MQTT_USER>'
   password: '<MQTT_PASSWORD>'

@@ -105,12 +105,12 @@ else
     # 10a. Patch Z2M base_topic if needed (idempotent)
     echo "Checking Z2M base_topic..."
     CURRENT_TOPIC=$(ssh "${PI_HOST}" "grep 'base_topic:' ${Z2M_DIR}/data/configuration.yaml 2>/dev/null | awk '{print \$2}'" || echo "")
-    if [ "$CURRENT_TOPIC" != "zigbee" ]; then
-        echo "  Updating base_topic from '${CURRENT_TOPIC}' to 'zigbee'..."
-        ssh "${PI_HOST}" "sed -i 's/base_topic: .*/base_topic: zigbee/' ${Z2M_DIR}/data/configuration.yaml"
+    if [ "$CURRENT_TOPIC" != "zigbee-garage" ]; then
+        echo "  Updating base_topic from '${CURRENT_TOPIC}' to 'zigbee-garage'..."
+        ssh "${PI_HOST}" "sed -i 's/base_topic: .*/base_topic: zigbee-garage/' ${Z2M_DIR}/data/configuration.yaml"
         echo "  base_topic updated. Z2M restart required."
     else
-        echo "  base_topic already set to 'zigbee'"
+        echo "  base_topic already set to 'zigbee-garage'"
     fi
 
     # 11. Install Z2M systemd service

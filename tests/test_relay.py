@@ -75,7 +75,7 @@ class TestOnMessage:
         rc = _load_controller(env_vars)
         client = MagicMock()
         msg = MagicMock()
-        msg.topic = "garage-controller/button/door_1/command"
+        msg.topic = "garage-controller/button/garage_door_1/command"
         msg.payload = b"PRESS"
 
         with patch.object(rc, "pulse_relay") as mock_pulse:
@@ -89,7 +89,7 @@ class TestOnMessage:
         rc = _load_controller(env_vars)
         client = MagicMock()
         msg = MagicMock()
-        msg.topic = "garage-controller/button/door_2/command"
+        msg.topic = "garage-controller/button/garage_door_2/command"
         msg.payload = b"PRESS"
 
         rc.on_message(client, None, msg)
@@ -103,7 +103,7 @@ class TestOnMessage:
         rc = _load_controller(env_vars)
         client = MagicMock()
         msg = MagicMock()
-        msg.topic = "garage-controller/button/door_2/command"
+        msg.topic = "garage-controller/button/garage_door_2/command"
         msg.payload = b"PRESS"
 
         with patch.object(rc, "pulse_relay") as mock_pulse:
