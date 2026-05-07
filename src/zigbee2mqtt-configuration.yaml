@@ -2,7 +2,7 @@
 # Deploy to: /opt/zigbee2mqtt/data/configuration.yaml
 #
 # BEFORE FIRST USE:
-# 1. Replace <MQTT_PASSWORD> with the HiveMQ Cloud password (same as garage-controller secrets.env MQTT_PASS)
+# 1. Replace <MQTT_BROKER>, <MQTT_USER>, <MQTT_PASSWORD> with broker connection info
 # 2. Replace <DONGLE_SERIAL> with the actual serial from: ls /dev/serial/by-id/
 # 3. Set permit_join: true temporarily when pairing sensors, then set back to false
 
@@ -13,7 +13,7 @@ permit_join: false
 
 mqtt:
   base_topic: zigbee-garage
-  server: 'mqtts://your_broker.hivemq.cloud'
+  server: 'mqtt://<MQTT_BROKER>'
   user: '<MQTT_USER>'
   password: '<MQTT_PASSWORD>'
   client_id: 'zigbee2mqtt-pi-three'

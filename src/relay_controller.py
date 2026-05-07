@@ -212,7 +212,6 @@ def main():
         mqtt.CallbackAPIVersion.VERSION2,
         client_id=f"garage-controller-{socket.gethostname()}",
     )
-    client.tls_set(ca_certs="/etc/ssl/certs/ca-certificates.crt")
     client.username_pw_set(USER, PASS)
     client.will_set(AVAIL_TOPIC, payload="offline", qos=1, retain=True)
 

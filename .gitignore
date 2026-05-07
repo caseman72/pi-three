@@ -14,3 +14,5 @@ node_modules/
 secrets.yml
 secrets.h
 config.env
+
+internet-cover-example.yml
